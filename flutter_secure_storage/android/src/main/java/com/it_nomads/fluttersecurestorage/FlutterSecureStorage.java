@@ -169,6 +169,15 @@ public class FlutterSecureStorage {
      * null (see {@link #initializeStorageCipher}), so a fresh cipher is authenticated and
      * derived here instead, then discarded once the caller is done with it.
      */
+    /**
+     * The cipher to keep in {@link #storageCipher} once it has been authenticated or migrated.
+     * With requireBiometricsPerOperation nothing is kept: a cached cipher would serve every later
+     * read and write without a prompt, so each operation must authenticate its own (#1303).
+     */
+    static StorageCipher cipherToCache(FlutterSecureStorageConfig config, StorageCipher cipher) {
+        return config.getRequireBiometricsPerOperation() ? null : cipher;
+    }
+
     private void withStorageCipher(SecurePreferencesCallback<StorageCipher> callback) {
         withStorageCipher(callback, false);
     }
@@ -659,7 +668,7 @@ public class FlutterSecureStorage {
             }
 
             // Update storageCipher to current
-            storageCipher = currentCipher;
+            storageCipher = cipherToCache(config, currentCipher);
 
             Log.i(TAG, "Non-biometric migration completed successfully! Migrated " + decryptedCache.size() + " items.");
             callback.onSuccess(null);
@@ -799,7 +808,7 @@ public class FlutterSecureStorage {
                         Log.d(TAG, "Step 6/6: Encrypting all data with current cipher...");
                         encryptAllWithCurrentCipher(decryptedCache, dataSource, currentCipher);
 
-                        storageCipher = currentCipher;
+                        storageCipher = cipherToCache(config, currentCipher);
 
                         Log.i(TAG, "Biometric→Non-biometric migration completed! Data no longer requires biometric authentication.");
                         callback.onSuccess(null);
@@ -878,7 +887,7 @@ public class FlutterSecureStorage {
                         Log.d(TAG, "Step 6/6: Encrypting all data with current biometric cipher...");
                         encryptAllWithCurrentCipher(cachedData, dataSource, currentCipher);
 
-                        storageCipher = currentCipher;
+                        storageCipher = cipherToCache(config, currentCipher);
 
                         Log.i(TAG, "Non-biometric→Biometric migration completed! Data now requires biometric authentication.");
                         callback.onSuccess(null);
@@ -973,7 +982,7 @@ public class FlutterSecureStorage {
                                     Log.d(TAG, "Step 7/7: Encrypting all data with current biometric cipher...");
                                     encryptAllWithCurrentCipher(cachedData, dataSource, currentCipher);
 
-                                    storageCipher = currentCipher;
+                                    storageCipher = cipherToCache(config, currentCipher);
 
                                     Log.i(TAG, "Biometric→Biometric migration completed! Data now uses new biometric cipher.");
                                     callback.onSuccess(null);
@@ -1505,7 +1514,7 @@ public class FlutterSecureStorage {
                 }
 
                 // Update storageCipher to current
-                storageCipher = currentCipher;
+                storageCipher = cipherToCache(config, currentCipher);
 
                 Log.i(TAG, "Non-biometric migration with backup completed successfully!");
                 Log.i(TAG, "Migrated " + decryptedCache.size() + " data items with new algorithm.");
@@ -1649,7 +1658,7 @@ public class FlutterSecureStorage {
                                 }
                             }
 
-                            storageCipher = currentCipher;
+                            storageCipher = cipherToCache(config, currentCipher);
 
                             Log.i(TAG, "Biometric→Non-biometric migration WITH BACKUP completed! Data no longer requires biometric authentication.");
                             callback.onSuccess(null);
@@ -1742,7 +1751,7 @@ public class FlutterSecureStorage {
                                 }
                             }
 
-                            storageCipher = currentCipher;
+                            storageCipher = cipherToCache(config, currentCipher);
 
                             Log.i(TAG, "Non-biometric→Biometric migration WITH BACKUP completed! Data now requires biometric authentication.");
                             callback.onSuccess(null);
@@ -1861,7 +1870,7 @@ public class FlutterSecureStorage {
                                             }
                                         }
 
-                                        storageCipher = currentCipher;
+                                        storageCipher = cipherToCache(config, currentCipher);
 
                                         Log.i(TAG, "Biometric→Biometric migration WITH BACKUP completed! Data now uses new biometric cipher.");
                                         Log.i(TAG, "Migrated " + cachedData.size() + " data items with new biometric algorithm.");
