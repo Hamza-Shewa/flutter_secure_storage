@@ -1278,6 +1278,11 @@ public class FlutterSecureStorage {
 
         CancellationSignal cancellationSignal = new CancellationSignal();
         Executor executor = Executors.newSingleThreadExecutor();
+        // Success, error and the negative button each complete the operation through here,
+        // once: the framework prompt reports its negative button only to the button's listener.
+        BiometricPromptOutcome<BiometricPrompt.AuthenticationResult> outcome =
+                new BiometricPromptOutcome<>(securePreferencesCallback);
+        String negativeButtonText = config.getBiometricPromptNegativeButton();
 
         BiometricPrompt.Builder promptInfoBuilder = new BiometricPrompt.Builder(context)
                 .setTitle(config.getBiometricPromptTitle())
@@ -1291,13 +1296,13 @@ public class FlutterSecureStorage {
             // DEVICE_CREDENTIAL as a fallback conflicts with a negative button; only add one
             // when using strong-biometric-only (no credential fallback).
             if (config.isStrongBiometricOnly()) {
-                promptInfoBuilder.setNegativeButton(config.getBiometricPromptNegativeButton(), executor, (dialog, which) -> {});
+                promptInfoBuilder.setNegativeButton(negativeButtonText, executor, (dialog, which) -> outcome.negativeButton(negativeButtonText));
             }
         } else {
             // Android 10 (API level 29) and lower: setAllowedAuthenticators is unavailable.
             // Device credentials are not enabled (setDeviceCredentialAllowed defaults to false),
             // so a negative button is required.
-            promptInfoBuilder.setNegativeButton(config.getBiometricPromptNegativeButton(), executor, (dialog, which) -> {});
+            promptInfoBuilder.setNegativeButton(negativeButtonText, executor, (dialog, which) -> outcome.negativeButton(negativeButtonText));
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
@@ -1310,14 +1315,13 @@ public class FlutterSecureStorage {
             @Override
             public void onAuthenticationSucceeded(BiometricPrompt.AuthenticationResult result) {
                 super.onAuthenticationSucceeded(result);
-                securePreferencesCallback.onSuccess(result);
+                outcome.succeeded(result);
             }
 
             @Override
             public void onAuthenticationError(int errorCode, CharSequence errString) {
                 super.onAuthenticationError(errorCode, errString);
-                Log.e(TAG, "Biometric authentication error [" + errorCode + "]: " + errString);
-                securePreferencesCallback.onError(new Exception("Biometric authentication error [" + errorCode + "]: " + errString));
+                outcome.failed(errorCode, errString);
             }
         };
 

@@ -6,6 +6,8 @@ import android.os.HandlerThread;
 import android.os.Looper;
 import android.util.Log;
 
+import java.util.concurrent.atomic.AtomicBoolean;
+
 import androidx.annotation.NonNull;
 
 import java.io.PrintWriter;
@@ -105,30 +107,41 @@ public class FlutterSecureStoragePlugin implements MethodCallHandler, FlutterPlu
     }
 
     /**
-     * MethodChannel.Result wrapper that responds on the platform thread.
+     * MethodChannel.Result wrapper that responds on the platform thread, once.
+     *
+     * <p>A second reply (for example a late prompt callback after the operation already
+     * completed) would throw "Reply already submitted" on the main thread and crash the app, so
+     * it is logged and dropped instead.
      */
     static class MethodResultWrapper implements Result {
 
         private final Result methodResult;
         private final Handler handler = new Handler(Looper.getMainLooper());
+        private final AtomicBoolean replied = new AtomicBoolean(false);
 
         MethodResultWrapper(Result methodResult) {
             this.methodResult = methodResult;
         }
 
+        private boolean firstReply(String kind) {
+            if (replied.compareAndSet(false, true)) return true;
+            Log.w(TAG, "Ignoring a second reply (" + kind + ") to an already answered call");
+            return false;
+        }
+
         @Override
         public void success(final Object result) {
-            handler.post(() -> methodResult.success(result));
+            if (firstReply("success")) handler.post(() -> methodResult.success(result));
         }
 
         @Override
         public void error(@NonNull final String errorCode, final String errorMessage, final Object errorDetails) {
-            handler.post(() -> methodResult.error(errorCode, errorMessage, errorDetails));
+            if (firstReply("error")) handler.post(() -> methodResult.error(errorCode, errorMessage, errorDetails));
         }
 
         @Override
         public void notImplemented() {
-            handler.post(methodResult::notImplemented);
+            if (firstReply("notImplemented")) handler.post(methodResult::notImplemented);
         }
     }
 
